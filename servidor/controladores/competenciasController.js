@@ -3,6 +3,7 @@ var con = require('../lib/conexionbd');
 function buscarCompetencias(req, res) {
 
   var sqlCompetencia = 'SELECT * FROM competencia';
+  console.log('obtenes todas las competencias.')
 
   con.query(sqlCompetencia, function (error, resultado, fields) {
     if (error) {
@@ -117,15 +118,47 @@ function crearCompetencia(req, res) {
       console.log("Hubo un error en la consulta", error.message);
       return res.status(500).send("Hubo un error en la consulta");
     }
-    if (resultado.length != 0) {
+    if (resultado.length === 1) {
       console.log("Hubo un error en la consulta");
       return res.status(422).send("Ya existe una competencia con ese nombre.");
     }
+        
+    // -------> NOTA: cambié el count es de pelicula.id y no *, también cambie la consulta y las relaciones de las tablas se dan en  cada uno de los casos. 
+    
+        var sqlCant = "SELECT COUNT(p.id) AS cantidad FROM pelicula p ";
+        
+        var sqlJoin = "";
+        
+        var sqlWhere = "";
 
-    var sqlCant = "SELECT COUNT(*) AS cantidad FROM pelicula p LEFT JOIN director_pelicula dp ON p.id = dp.pelicula_id LEFT JOIN actor_pelicula ap ON P.id = ap.pelicula_id ";
+        if ((generoCompetencia) || (directorCompetencia) || (actorCompetencia)) {
 
+          sqlWhere = " WHERE ";
+
+          if (generoCompetencia) {
+            sqlWhere = sqlWhere + " p.genero_id = " + generoCompetencia + " AND";
+          }
+          if (directorCompetencia) {
+            sqlJoin = sqlJoin + " LEFT JOIN director_pelicula dp ON p.id = dp.pelicula_id ";
+            sqlWhere = sqlWhere + " dp.director_id = " + directorCompetencia + " AND";
+          }
+          if (actorCompetencia) {
+            sqlJoin = sqlJoin + " LEFT JOIN actor_pelicula ap ON P.id = ap.pelicula_id ";
+            sqlWhere = sqlWhere + " ap.actor_id = " + actorCompetencia + " AND";
+          }
+          sqlWhere = sqlWhere.substr(0, sqlWhere.length - 3)
+        }
+
+        sqlCant = sqlCant + sqlJoin + sqlWhere
+  
+    /*
+    
+    -------> ERROR: PERMITIA CREAR UNA COMPETENCIA CON TAN SOLO UNA PELICULA <-------
+    
+    var sqlCant = "SELECT COUNT(*) AS cantidad FROM pelicula p LEFT JOIN director_pelicula dp ON p.id = dp.pelicula_id LEFT JOIN actor_pelicula ap ON P.id = ap.pelicula_id LEFT JOIN genero g ON p.genero_id = g.id";
+    
     var sqlWhere = "";
-
+    
     if ((generoCompetencia) || (directorCompetencia) || (actorCompetencia)) {
 
       sqlWhere = " WHERE ";
@@ -141,15 +174,16 @@ function crearCompetencia(req, res) {
       }
       sqlWhere = sqlWhere.substr(0, sqlWhere.length - 3)
     }
-
+    
     sqlCant = sqlCant + sqlWhere
+*/
 
     con.query(sqlCant, function (error, resultado, fields) {
       if (error) {
         console.log("Hubo un error en la consulta", error.message);
         return res.status(500).send("Hubo un error en la consulta");
       }
-      if (resultado[0].cantidad < 2) {
+      if (resultado.length === 0 || resultado[0].cantidad <= 1) {
         console.log("No exiten al menos 2 peliculas que cumplan los criterios");
         return res.status(422).send("No exiten al menos 2 peliculas que cumplan los criterios");
       }
@@ -235,31 +269,30 @@ function obtenerActores(req, res) {
 function obtenerCompetencia(req, res) {
   var idCompetencia = req.params.id;
 
-  //var sql = "SELECT c.id, c.nombre, c.genero_id, c.director_id, c.actor_id FROM competencia c LEFT JOIN genero g ON g.id = c.genero_id LEFT JOIN director d ON d.id = c.director_id LEFT JOIN actor a ON a.id = c.actor_id WHERE c.id = " + idCompetencia;
-  
-  var sql = "SELECT * FROM competencia WHERE id = " + idCompetencia;
+  var sql = "SELECT c.nombre, g.nombre AS generoCompetencia, d.nombre AS directorCompetencia, a.nombre AS actorCompetencia FROM competencia c LEFT JOIN genero g ON g.id = c.genero_id LEFT JOIN director d ON d.id = c.director_id LEFT JOIN actor a ON a.id = c.actor_id WHERE c.id = " + idCompetencia;
 
   con.query(sql, function (error, resultado, fields) {
     if (error) {
-      console.log('Hubo un error en la consulta.', error.message);
-      return res.status(500).send('Hubo un error en la consulta');
+      console.log("Hubo un error en la consulta", error.message);
+      return res.status(500).send("Hubo un error en la consulta");
     }
     if (resultado.length == 0) {
       return res.status(404).json('La competencia no existe');
     }
     var response = {
-      'id': resultado,
       'nombre': resultado[0].nombre,
-      'genero': resultado[0].genero,
-      'direccion': resultado[0].direccion,
-      'actor': resultado[0].actor
+      'genero_nombre': resultado[0].generoCompetencia,
+      'actor_nombre': resultado[0].actorCompetencia,
+      'director_nombre': resultado[0].directorCompetencia
     };
-    res.status(200).send(JSON.stringify(response))
-  })
+
+    res.send(JSON.stringify(response));
+  });
 };
 
 function eliminarCompetencia(req, res) {
   var idCompetencia = req.params.id;
+  console.log('Competencia para eliminar: ' + idCompetencia);
 
   var sqlBuscarCompetencia = "SELECT * FROM competencia WHERE id = " + idCompetencia;
 
@@ -291,6 +324,33 @@ function eliminarCompetencia(req, res) {
       })
     })
   })
+};
+
+function editarCompetencia(req, res) {
+  var idCompetencia = req.params.id;
+  var nombreCompetencia = req.body.nombre;
+  console.log('Competencia para editar: ' + idCompetencia);
+  console.log('Competencia nombre: ' + nombreCompetencia);
+
+  var competenciaAEditar = "SELECT * FROM competencia WHERE id = " + idCompetencia;
+
+  con.query(competenciaAEditar, function (error, resultado, fields) {
+    if (error) {
+      console.log('Hubo un error en la consulta', error.message);
+      return res.status(404).send('Hubo un error en la consulta');
+    }
+    if (resultado.length == 0) {
+      return res.status(404).json('La competencia no existe');
+    }
+
+    con.query('UPDATE competencia SET nombre = ? WHERE id = ?', [nombreCompetencia, idCompetencia], function (error, resultado, fields) {
+      if (error) {
+        console.log("Hubo un error en la consulta", error.message);
+        return res.status(500).send("Hubo un error en la consulta");
+      }
+      res.status(200).send(JSON.stringify(resultado))
+    })
+  })
 }
 
 module.exports = {
@@ -304,5 +364,6 @@ module.exports = {
   obtenerDirectores: obtenerDirectores,
   obtenerActores: obtenerActores,
   obtenerCompetencia: obtenerCompetencia,
-  eliminarCompetencia: eliminarCompetencia
+  eliminarCompetencia: eliminarCompetencia,
+  editarCompetencia: editarCompetencia
 }
